@@ -85,7 +85,7 @@ pub fn create_server_config() -> ServerConfig {
     server_config
 }
 
-// codenameoyster.ai-0001
+// codenameoyster.ai
 // rustatian.me
 pub async fn init_cert_in_memory(listen: Vec<String>) -> std::io::Result<()> {
     for domain in listen {

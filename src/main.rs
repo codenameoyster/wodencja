@@ -25,14 +25,14 @@ async fn main() {
     // codenameoyster.ai-0001
     // rustatian.me
     _ = sni::init_cert_in_memory(vec![
-        "codenameoyster.ai-0001".to_string(),
+        "codenameoyster.ai".to_string(),
         "rustatian.me".to_string(),
     ])
     .await;
 
     let config = Arc::new(sni::create_server_config());
     let tls_acceptor = TlsAcceptor::from(config);
-    let bind = "[::1]:3000";
+    let bind = "0.0.0.0:3000";
     let tcp_listener = TcpListener::bind(bind).await.unwrap();
     info!("HTTPS server listening on {bind}. To contact curl -k https://localhost:3000");
     let app = Router::new().route("/", get(handler));
@@ -52,24 +52,18 @@ async fn main() {
                 return;
             };
 
-            // Hyper has its own `AsyncRead` and `AsyncWrite` traits and doesn't use tokio.
-            // `TokioIo` converts between them.
             let stream = TokioIo::new(stream);
 
-            // Hyper also has its own `Service` trait and doesn't use tower. We can use
-            // `hyper::service::service_fn` to create a hyper `Service` that calls our app through
-            // `tower::Service::call`.
             let hyper_service = hyper::service::service_fn(move |request: Request<Incoming>| {
-                // We have to clone `tower_service` because hyper's `Service` uses `&self` whereas
-                // tower's `Service` requires `&mut self`.
-                //
-                // We don't need to call `poll_ready` since `Router` is always ready.
                 tower_service.clone().call(request)
             });
 
-            let ret = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
-                .serve_connection_with_upgrades(stream, hyper_service)
+            let ret = hyper::server::conn::http2::Builder::new(TokioExecutor::new())
+                .serve_connection(stream, hyper_service)
                 .await;
+            // let ret = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
+            //     .serve_connection_with_upgrades(stream, hyper_service)
+            //     .await;
 
             if let Err(err) = ret {
                 warn!("error serving connection from {}: {}", addr, err);
