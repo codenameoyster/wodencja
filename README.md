@@ -1,2 +1,3 @@
-# wodencja
-This is the frontend entrypoint microservice (aka /login) that redirects users to the chosen applications.
+# wódencja (vodka)
+
+Entrypoint gateway with TLS SNI parsing (rustls) and HTTP/2 support with axum.

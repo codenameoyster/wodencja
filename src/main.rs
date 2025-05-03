@@ -2,13 +2,16 @@ use axum::{Router, http::Request, routing::get};
 use futures_util::pin_mut;
 use hyper::body::Incoming;
 use hyper_util::rt::{TokioExecutor, TokioIo};
-use openssl::ssl::{Ssl, SslAcceptor, SslFiletype, SslMethod};
-use std::{path::PathBuf, pin::Pin, sync::Arc, vec};
+use std::{sync::Arc, vec};
 use tokio::net::TcpListener;
-use tokio_openssl::SslStream;
-use tokio_rustls::TlsAcceptor;
-use tower::Service;
-use tracing::{error, info, warn};
+use tokio_rustls::{TlsAcceptor, server};
+use tower::{Service, ServiceBuilder};
+use tower_http::{
+    compression::{self, CompressionLayer},
+    decompression::RequestDecompressionLayer,
+    services::ServeDir,
+};
+use tracing::{debug, error, info, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 mod sni;
 
@@ -32,18 +35,36 @@ async fn main() {
 
     let config = Arc::new(sni::create_server_config());
     let tls_acceptor = TlsAcceptor::from(config);
-    let bind = "0.0.0.0:3000";
-    let tcp_listener = TcpListener::bind(bind).await.unwrap();
-    info!("HTTPS server listening on {bind}. To contact curl -k https://localhost:3000");
-    let app = Router::new().route("/", get(handler));
+    let tcp_listener = TcpListener::bind("0.0.0.0:443").await.unwrap();
+
+    let app = Router::new(); /* .route(
+    "/",
+    get(handler).layer(
+    ServiceBuilder::new()
+    .layer(RequestDecompressionLayer::new())
+    .layer(CompressionLayer::new()),
+    ),
+    );
+     */
 
     pin_mut!(tcp_listener);
+
     loop {
-        let tower_service = app.clone();
-        let tls_acceptor = tls_acceptor.clone();
+        let tower_service: Router = app.clone();
+        let tls_acceptor: TlsAcceptor = tls_acceptor.clone();
+
+        // Accept a new TCP connection
+        let res: Result<(tokio::net::TcpStream, std::net::SocketAddr), std::io::Error> =
+            tcp_listener.accept().await;
 
         // Wait for new tcp connection
-        let (cnx, addr) = tcp_listener.accept().await.unwrap();
+        let (cnx, addr) = match res {
+            Ok((cnx, addr)) => (cnx, addr),
+            Err(e) => {
+                error!("error accepting connection: {}", e);
+                continue;
+            }
+        };
 
         tokio::spawn(async move {
             // Wait for tls handshake to happen
@@ -52,18 +73,54 @@ async fn main() {
                 return;
             };
 
-            let stream = TokioIo::new(stream);
+            // io + serve_connection
+            let (_, session) = stream.get_ref();
+            let sn: Option<String> = session.server_name().map(String::from);
+            if sn.is_none() {
+                error!("error getting server name from connection from {}", addr);
+                return;
+            }
+
+            // safe unwrap
+            let sn = sn.unwrap();
+
+            let tower_service = match sn.as_str() {
+                "codenameoyster.ai" => {
+                    debug!("Serving codenameoyster.ai");
+                    tower_service
+                        .fallback_service(ServeDir::new("/var/www/codenameoyster.ai/html"))
+                        .layer(
+                            ServiceBuilder::new()
+                                .layer(RequestDecompressionLayer::new())
+                                .layer(CompressionLayer::new()),
+                        )
+                }
+                "rustatian.me" => {
+                    debug!("Serving rustatian.me");
+                    tower_service
+                        .fallback_service(ServeDir::new("/var/www/rustatian.me/html"))
+                        .layer(
+                            ServiceBuilder::new()
+                                .layer(RequestDecompressionLayer::new())
+                                .layer(CompressionLayer::new()),
+                        )
+                }
+                _ => {
+                    error!("error getting server name from connection from {}", addr);
+                    return;
+                }
+            };
+
+            let stream: TokioIo<server::TlsStream<tokio::net::TcpStream>> = TokioIo::new(stream);
 
             let hyper_service = hyper::service::service_fn(move |request: Request<Incoming>| {
                 tower_service.clone().call(request)
             });
 
-            let ret = hyper::server::conn::http2::Builder::new(TokioExecutor::new())
-                .serve_connection(stream, hyper_service)
-                .await;
-            // let ret = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
-            //     .serve_connection_with_upgrades(stream, hyper_service)
-            //     .await;
+            let ret: Result<(), hyper::Error> =
+                hyper::server::conn::http2::Builder::new(TokioExecutor::new())
+                    .serve_connection(stream, hyper_service)
+                    .await;
 
             if let Err(err) = ret {
                 warn!("error serving connection from {}: {}", addr, err);
