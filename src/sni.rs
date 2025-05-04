@@ -13,6 +13,7 @@ pub static CERT_DB: Lazy<Mutex<std::collections::HashMap<String, TlsCollection>>
 #[derive(Debug)]
 struct ResolveServerCert;
 
+// simple resolver for SNI
 impl ResolvesServerCert for ResolveServerCert {
     fn resolve(
         &self,
