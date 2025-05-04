@@ -1,4 +1,4 @@
-use axum::{Router, http::Request, routing::get};
+use axum::{Router, http::Request};
 use futures_util::pin_mut;
 use hyper::body::Incoming;
 use hyper_util::rt::{TokioExecutor, TokioIo};
@@ -7,11 +7,9 @@ use tokio::net::TcpListener;
 use tokio_rustls::{TlsAcceptor, server};
 use tower::{Service, ServiceBuilder};
 use tower_http::{
-    compression::{self, CompressionLayer},
-    decompression::RequestDecompressionLayer,
-    services::ServeDir,
+    compression::CompressionLayer, decompression::RequestDecompressionLayer, services::ServeDir,
 };
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, warn};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 mod sni;
 
@@ -37,15 +35,7 @@ async fn main() {
     let tls_acceptor = TlsAcceptor::from(config);
     let tcp_listener = TcpListener::bind("0.0.0.0:443").await.unwrap();
 
-    let app = Router::new(); /* .route(
-    "/",
-    get(handler).layer(
-    ServiceBuilder::new()
-    .layer(RequestDecompressionLayer::new())
-    .layer(CompressionLayer::new()),
-    ),
-    );
-     */
+    let app = Router::new();
 
     pin_mut!(tcp_listener);
 

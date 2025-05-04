@@ -6,7 +6,6 @@ use rustls::server::ServerSessionMemoryCache;
 use rustls::{compress::CompressionCache, server::ResolvesServerCert, sign::CertifiedKey};
 use std::sync::{Arc, Mutex};
 use std::{fs::File, io::BufReader};
-use tracing_subscriber::fmt::format;
 
 pub static CERT_DB: Lazy<Mutex<std::collections::HashMap<String, TlsCollection>>> =
     Lazy::new(|| Mutex::new(std::collections::HashMap::new()));
