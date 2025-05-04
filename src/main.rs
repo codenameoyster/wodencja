@@ -118,7 +118,3 @@ async fn main() {
         });
     }
 }
-
-async fn handler() -> &'static str {
-    "Hello, World!"
-}

@@ -19,16 +19,16 @@ impl ResolvesServerCert for ResolveServerCert {
         client_hello: rustls::server::ClientHello<'_>,
     ) -> Option<Arc<rustls::sign::CertifiedKey>> {
         match client_hello.server_name() {
-            Some(sni) => {
-                if let Some(cert_key) = CERT_DB.lock().unwrap().get(&sni.to_string()) {
-                    return Some(cert_key.certified_key.clone());
-                } else {
-                    return None;
+            Some(sni) => match CERT_DB.lock() {
+                Ok(cert_db) => {
+                    if let Some(cert_key) = cert_db.get(sni) {
+                        return Some(cert_key.certified_key.clone());
+                    }
+                    None
                 }
-            }
-            None => {
-                return None;
-            }
+                Err(_) => None,
+            },
+            None => None,
         }
     }
 }
@@ -66,8 +66,7 @@ pub async fn get_cert_key(domain: &str) -> Option<CertifiedKey> {
             return Some(certified_key);
         }
     }
-
-    return None;
+    None
 }
 
 pub fn create_server_config() -> ServerConfig {
