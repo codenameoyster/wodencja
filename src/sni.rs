@@ -18,7 +18,7 @@ impl ResolvesServerCert for ResolveServerCert {
     fn resolve(
         &self,
         client_hello: rustls::server::ClientHello<'_>,
-    ) -> Option<Arc<rustls::sign::CertifiedKey>> {
+    ) -> Option<Arc<CertifiedKey>> {
         match client_hello.server_name() {
             Some(sni) => match CERT_DB.lock() {
                 Ok(cert_db) => {
@@ -35,7 +35,7 @@ impl ResolvesServerCert for ResolveServerCert {
 }
 
 pub struct TlsCollection {
-    pub certified_key: Arc<rustls::sign::CertifiedKey>,
+    pub certified_key: Arc<CertifiedKey>,
 }
 
 pub async fn get_cert_key(domain: &str) -> Option<CertifiedKey> {
